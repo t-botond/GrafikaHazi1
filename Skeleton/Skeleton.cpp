@@ -31,7 +31,7 @@ GPUProgram gpuProgram;
 const size_t EDGES = (((NODES - 1) * NODES) / 2)* TELITETTSEG;
 
 struct grafPont {
-	vec2 koord;
+	vec2 eukl;
 	vec3 pos; 
 	unsigned int vao;
 	grafPont(): vao(0){
@@ -39,22 +39,8 @@ struct grafPont {
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		float w = 1.0f + pos.x*pos.x + pos.y*pos.y;
 		pos.z = sqrtf(w);
-		koord.x = pos.x / w;
-		koord.y = pos.y / w;
-	}
-	void transform(vec2 v) {
-		pos = v;
-		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
-		pos.z = sqrtf(w);
-		koord.x = pos.x / w;
-		koord.y = pos.y / w;
-	}
-
-	grafPont& operator=(const grafPont& rhs) {
-		if (this == &rhs) return *this;
-		this->koord= rhs.koord;
-		this->vao = rhs.vao;
-		return *this;
+		eukl.x = (pos.x / w) * 2.0f;
+		eukl.y = (pos.y / w) * 2.0f;
 	}
 };
 
@@ -73,15 +59,13 @@ class Graf {
 	unsigned int nodeVao;
 public:
 	Graf() {
-		nodes = new grafPont[NODES];
+		generateNodes();
 		int szukseges_el = EDGES;
-
 		for (size_t x = 0; x < NODES -1 ; ++x) {
 			for (size_t y = x + 1; y < NODES; ++y) {
 				szMtx[x][y] = false;
 			}
 		}
-
 		while (szukseges_el != 0) {
 			int n1 = rand() % NODES;
 			int n2 = rand() % NODES;
@@ -123,8 +107,8 @@ public:
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);		
 		float vertices[(NODES * 2)];
 		for (size_t i = 0; i < NODES ; ++i) {
-			vertices[i*2] = nodes[i].koord.x;
-			vertices[i*2 +1] = nodes[i].koord.y;
+			vertices[i*2] = nodes[i].eukl.x;
+			vertices[i*2 +1] = nodes[i].eukl.y;
 		}
 		glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
@@ -138,6 +122,7 @@ public:
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
 		glBindVertexArray(nodeVao);  // Draw call
+		glPointSize(4);
 		glDrawArrays(GL_POINTS, 0 /*startIdx*/, NODES /*# Elements*/);
 
 	}
@@ -151,10 +136,10 @@ public:
 		for (size_t i = 0; i < EDGES; ++i) {
 			grafPont* tmp = edgeAt(i);
 			if (tmp == nullptr) continue;
-			vertices[i * 4] = tmp[0].koord.x;
-			vertices[i * 4 + 1] = tmp[0].koord.y;
-			vertices[i * 4 + 2] = tmp[1].koord.x;
-			vertices[i * 4 + 3] = tmp[1].koord.y;
+			vertices[i * 4] = tmp[0].eukl.x;
+			vertices[i * 4 + 1] = tmp[0].eukl.y;
+			vertices[i * 4 + 2] = tmp[1].eukl.x;
+			vertices[i * 4 + 3] = tmp[1].eukl.y;
 			delete[] tmp;
 		}
 		glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
@@ -172,25 +157,51 @@ public:
 		glDrawArrays(GL_LINES, 0, EDGES*2);///startIdx///# Elements/
 	}
 	void magic() {
-		for (size_t n1 = 0; n1 < NODES - 1; n1+=2) {
-			float osszsuly = 0.0f;
-			vec2 tkp;
-			for (size_t n2 = n1+1; n2 < NODES-1; n2+=2) {
-				++osszsuly;
-				if (szMtx[min(n1, n2)][max(n1, n2)]) {
-					tkp.x += nodes[n2].pos.x;
-					tkp.y += nodes[n2].pos.y;
-				}
-				else {
-					tkp.x -= nodes[n2].pos.x;
-					tkp.y -= nodes[n2].pos.y;
-				}
+		int legjobb = elmetszetek();
+		grafPont* gp = nodes;
+		for (int i = 0; i < 300; ++i) {
+			nodes = new grafPont[NODES];
+			if (elmetszetek() < legjobb) {
+				delete[] gp;
+				legjobb = elmetszetek();
+				gp = nodes;
 			}
-
-			tkp.x /= osszsuly;
-			tkp.y /= osszsuly;
-			nodes[n1].transform(tkp);
+			else delete[] nodes;
 		}
+		nodes = gp;
+	}
+
+	int elmetszetek() {
+		int sum = 0;
+		for (size_t i = 0; i < EDGES - 1; ++i) {
+			for (size_t j = i + 1; j < EDGES; ++j) {
+				grafPont* egyik = edgeAt(i);
+				grafPont* masik = edgeAt(j);
+				if (metszikEgymast(egyik, masik)) ++sum;
+				delete[] egyik;
+				delete[] masik;
+			}
+		}
+		return sum;
+	}
+
+	/*
+	* A kód alapja a http://flassari.is/2008/11/line-line-intersection-in-cplusplus/ oldalról származik
+	*/
+	bool metszikEgymast(grafPont* a, grafPont* b) {
+		if (a == nullptr || b == nullptr) {
+			return false;
+		}
+		float x1 = a[0].pos.x, x2 = a[1].pos.x, x3 = b[0].pos.x, x4 = b[1].pos.x;
+		float y1 = a[0].pos.y, y2 = a[1].pos.y, y3 = b[0].pos.y, y4 = b[1].pos.y;
+		float d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+		if (d == 0) return false;
+		float pre = (x1 * y2 - y1 * x2), post = (x3 * y4 - y3 * x4);
+		float x = (pre * (x3 - x4) - (x1 - x2) * post) / d;
+		float y = (pre * (y3 - y4) - (y1 - y2) * post) / d;
+		if (x < min(x1, x2) || x > max(x1, x2) || x < min(x3, x4) || x > max(x3, x4)) return false;
+		if (y < min(y1, y2) || y > max(y1, y2) || y < min(y3, y4) || y > max(y3, y4)) return false;
+		return true;
 	}
 
 	~Graf() {
@@ -200,11 +211,9 @@ public:
 
 Graf g;
 
-
 void onInitialization() {
 	printf("tavolsag a [0] es [1] csucs kozott = %.3f", d(g[0], g[1]));
 	glViewport(0, 0, windowWidth, windowHeight);
-	g.magic(); //heurisztika
     g.prepareNodes();
 	g.prepareEdges();
 }
@@ -220,7 +229,9 @@ void onDisplay() {
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	if (key == ' ') {
+		
+	}
 }
 
 // Key of ASCII code released
@@ -238,4 +249,10 @@ void onMouse(int button, int state, int pX, int pY) {
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	if (g.elmetszetek() > 110) {
+		g.magic(); //heurisztika
+		g.prepareNodes();
+		g.prepareEdges();
+		glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	}
 }
