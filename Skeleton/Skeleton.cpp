@@ -21,32 +21,31 @@ const char* const fragmentSource = R"(
 )";
 
 GPUProgram gpuProgram;
-#define NODES 500
+#define NODES 50
 #define TELITETTSEG 0.05
 #define CIRCLE_RESOLUTION 16
-#define RADIUS 0.1f
+#define RADIUS 0.03f
 
 const size_t EDGES = (((NODES - 1) * NODES) / 2) * TELITETTSEG;
 
-vec3 trf(vec2 inp) {
+vec3 trf(vec2 inp, float nagyitas = 2.0f) {
 	vec3 ret;
 	ret.z = 1.0f + inp.x * inp.x + inp.y * inp.y;
 	ret.x = inp.x / ret.z ;
 	ret.y = inp.y / ret.z ;
-	return ret;
+	return ret * nagyitas;
 }
 
 struct grafPont {
 	vec3 eukl;
 	vec3 pos;
-
 	unsigned int vao;
 	grafPont() : vao(0) {
 		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
 		pos.z = sqrtf(w);
-		eukl = trf(vec2(pos.x, pos.y)) * 2.0f;
+		eukl = trf(vec2(pos.x, pos.y));
 	}
 };
 
@@ -56,17 +55,12 @@ float lorenz(vec3 a, vec3 b) {
 float d(const grafPont& a, const grafPont& b) {
 	return acosh(-lorenz(a.pos, b.pos)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
-void kopi(float* hova, float* mit, size_t mennyit) {
-	for (size_t i = 0; i < mennyit; ++i)
-		hova[i] = mit[i];
-}
 
 class Graf {
 	grafPont* nodes;
 	bool szMtx[NODES][NODES];
 	unsigned int edgeVao;
 	unsigned int nodeVao;
-	unsigned int cVao;
 public:
 	Graf():nodeVao(0), edgeVao(0){
 		nodes = new grafPont[NODES];
@@ -107,67 +101,44 @@ public:
 		}
 		return nullptr;
 	}
+	
 	void prepareNodes() {
-		glGenVertexArrays(1, &nodeVao);
-		glBindVertexArray(nodeVao);
-		unsigned int vbo;
-		glGenBuffers(1, &vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		float vertices[(NODES * 2)];
 		for (size_t i = 0; i < NODES; ++i) {
-			vertices[i * 2] = nodes[i].eukl.x;
-			vertices[i * 2 + 1] = nodes[i].eukl.y;
+			prepareCircle(nodes[i].pos.x, nodes[i].pos.y, nodes[i].vao);
 		}
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-		gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	}
 	void drawNodes() {
-		int location = glGetUniformLocation(gpuProgram.getId(), "color");
-		glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
-		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
-		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
-		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
-		glBindVertexArray(nodeVao);  // Draw call
-		glPointSize(4);
-		glDrawArrays(GL_POINTS, 0 /*startIdx*/, NODES /*# Elements*/);
+		for (size_t i = 0; i < NODES; ++i) {
+			drawCircle(nodes[i].vao);
+		}
 	}
-
-	void prepareCircle(float x, float y) {
-		glGenVertexArrays(1, &cVao);
-		glBindVertexArray(cVao);
+	
+	void prepareCircle(float x, float y, unsigned int& vao) {
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
 		unsigned int vbo;
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		float vertices[CIRCLE_RESOLUTION * 2];
 		for (int i = 0; i <= CIRCLE_RESOLUTION; i++) {
-			/*
 			float angle = float(i) / CIRCLE_RESOLUTION * 2.0f * M_PI;
 			vec2 p(x + RADIUS * cos(angle), y + RADIUS * sin(angle));
 			vec3 t = trf(p);
 			vertices[i * 2] = t.x;
 			vertices[(i * 2) + 1] =t.y;
-			*/
-			/*
-
-			float angle = float(i) / CIRCLE_RESOLUTION * 2.0f * M_PI;
-			vertices[i * 2] = x + RADIUS * cos(angle);
-			vertices[(i * 2) + 1] = y + RADIUS * sin(angle);
-			*/
 		}
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 		gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	}
-	void drawCircle( ) {
+	void drawCircle(unsigned int& vao) {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
 		glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
 		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
-		glBindVertexArray(cVao);  // Draw call
+		glBindVertexArray(vao);  // Draw call
 		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, CIRCLE_RESOLUTION /*# Elements*/);
 	}
 
@@ -256,17 +227,15 @@ Graf g;
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 	g.prepareNodes();
-	//g.prepareEdges();
-	//g.prepareCircle(0.5f,0.5f);
+	g.prepareEdges();
 }
 
 // Window has become invalid: Redraw
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-	//g.drawEdges();
+	g.drawEdges();
 	g.drawNodes();
-	//g.drawCircle();
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
@@ -274,8 +243,8 @@ void onDisplay() {
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
 		g.magic(); //heurisztika
-		g.prepareNodes();
-		g.prepareEdges();
+		//g.prepareNodes();
+		//g.prepareEdges();
 		glutPostRedisplay();
 	}
 }
