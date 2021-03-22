@@ -21,31 +21,44 @@ const char* const fragmentSource = R"(
 )";
 
 GPUProgram gpuProgram;
-#define NODES 50
+#define NODES 500
 #define TELITETTSEG 0.05
+#define CIRCLE_RESOLUTION 16
+#define RADIUS 0.1f
 
-const size_t EDGES = (((NODES - 1) * NODES) / 2)* TELITETTSEG;
+const size_t EDGES = (((NODES - 1) * NODES) / 2) * TELITETTSEG;
+
+vec3 trf(vec2 inp) {
+	vec3 ret;
+	ret.z = 1.0f + inp.x * inp.x + inp.y * inp.y;
+	ret.x = inp.x / ret.z ;
+	ret.y = inp.y / ret.z ;
+	return ret;
+}
 
 struct grafPont {
-	vec2 eukl;
-	vec3 pos; 
+	vec3 eukl;
+	vec3 pos;
+
 	unsigned int vao;
-	grafPont(): vao(0){
+	grafPont() : vao(0) {
 		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
-		float w = 1.0f + pos.x*pos.x + pos.y*pos.y;
+		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
 		pos.z = sqrtf(w);
-		eukl.x = (pos.x / w) * 2.0f;
-		eukl.y = (pos.y / w) * 2.0f;
+		eukl = trf(vec2(pos.x, pos.y)) * 2.0f;
 	}
 };
 
 float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
 }
-
 float d(const grafPont& a, const grafPont& b) {
 	return acosh(-lorenz(a.pos, b.pos)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
+}
+void kopi(float* hova, float* mit, size_t mennyit) {
+	for (size_t i = 0; i < mennyit; ++i)
+		hova[i] = mit[i];
 }
 
 class Graf {
@@ -53,11 +66,12 @@ class Graf {
 	bool szMtx[NODES][NODES];
 	unsigned int edgeVao;
 	unsigned int nodeVao;
+	unsigned int cVao;
 public:
-	Graf() {
+	Graf():nodeVao(0), edgeVao(0){
 		nodes = new grafPont[NODES];
 		int szukseges_el = EDGES;
-		for (size_t x = 0; x < NODES -1 ; ++x) {
+		for (size_t x = 0; x < NODES - 1; ++x) {
 			for (size_t y = x + 1; y < NODES; ++y) {
 				szMtx[x][y] = false;
 			}
@@ -66,23 +80,21 @@ public:
 			int n1 = rand() % NODES;
 			int n2 = rand() % NODES;
 			if (n1 != n2) {
-				if (szMtx[min(n1,n2)][max(n1,n2)] == false) {
+				if (szMtx[min(n1, n2)][max(n1, n2)] == false) {
 					szMtx[min(n1, n2)][max(n1, n2)] = true;
 					--szukseges_el;
 				}
 			}
 		}
 	}
-
 	grafPont& operator[](size_t idx) {
 		if (idx >= NODES) throw "Tulindexeles";
 		return nodes[idx];
 	}
-
 	grafPont* edgeAt(size_t idx) {
 		if (idx >= EDGES) throw "Sok lesz az az el!";
 		size_t cnt = 0;
-		for (size_t x = 0; x < NODES -1; ++x) {
+		for (size_t x = 0; x < NODES - 1; ++x) {
 			for (size_t y = x + 1; y < NODES; ++y) {
 				if (szMtx[x][y] == true) ++cnt;
 				if (cnt == idx) {
@@ -97,18 +109,18 @@ public:
 	}
 	void prepareNodes() {
 		glGenVertexArrays(1, &nodeVao);
-		glBindVertexArray(nodeVao);	
+		glBindVertexArray(nodeVao);
 		unsigned int vbo;
 		glGenBuffers(1, &vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);		
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		float vertices[(NODES * 2)];
-		for (size_t i = 0; i < NODES ; ++i) {
-			vertices[i*2] = nodes[i].eukl.x;
-			vertices[i*2 +1] = nodes[i].eukl.y;
+		for (size_t i = 0; i < NODES; ++i) {
+			vertices[i * 2] = nodes[i].eukl.x;
+			vertices[i * 2 + 1] = nodes[i].eukl.y;
 		}
-		glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0,2, GL_FLOAT, GL_FALSE,0, NULL);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 		gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	}
 	void drawNodes() {
@@ -120,15 +132,54 @@ public:
 		glBindVertexArray(nodeVao);  // Draw call
 		glPointSize(4);
 		glDrawArrays(GL_POINTS, 0 /*startIdx*/, NODES /*# Elements*/);
-
 	}
+
+	void prepareCircle(float x, float y) {
+		glGenVertexArrays(1, &cVao);
+		glBindVertexArray(cVao);
+		unsigned int vbo;
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		float vertices[CIRCLE_RESOLUTION * 2];
+		for (int i = 0; i <= CIRCLE_RESOLUTION; i++) {
+			/*
+			float angle = float(i) / CIRCLE_RESOLUTION * 2.0f * M_PI;
+			vec2 p(x + RADIUS * cos(angle), y + RADIUS * sin(angle));
+			vec3 t = trf(p);
+			vertices[i * 2] = t.x;
+			vertices[(i * 2) + 1] =t.y;
+			*/
+			/*
+
+			float angle = float(i) / CIRCLE_RESOLUTION * 2.0f * M_PI;
+			vertices[i * 2] = x + RADIUS * cos(angle);
+			vertices[(i * 2) + 1] = y + RADIUS * sin(angle);
+			*/
+		}
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+		gpuProgram.create(vertexSource, fragmentSource, "outColor");
+	}
+	void drawCircle( ) {
+		int location = glGetUniformLocation(gpuProgram.getId(), "color");
+		glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
+		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
+		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
+		glBindVertexArray(cVao);  // Draw call
+		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, CIRCLE_RESOLUTION /*# Elements*/);
+	}
+
 	void prepareEdges() {
-		glGenVertexArrays(1, &edgeVao);
+		if(edgeVao == 0)
+			glGenVertexArrays(1, &edgeVao);
+		printf("nodeVao : %d \n", edgeVao);
 		glBindVertexArray(edgeVao);
 		unsigned int vbo;
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		float vertices[EDGES*4];
+		float vertices[EDGES * 4];
 		for (size_t i = 0; i < EDGES; ++i) {
 			grafPont* tmp = edgeAt(i);
 			if (tmp == nullptr) continue;
@@ -138,9 +189,9 @@ public:
 			vertices[i * 4 + 3] = tmp[1].eukl.y;
 			delete[] tmp;
 		}
-		glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);  // AttribArray 0
-		glVertexAttribPointer(0,2, GL_FLOAT, GL_FALSE,0, NULL);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 		gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	}
 	void drawEdges() {
@@ -150,7 +201,7 @@ public:
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
 		glBindVertexArray(edgeVao);  // Draw call
-		glDrawArrays(GL_LINES, 0, EDGES*2);///startIdx///# Elements/
+		glDrawArrays(GL_LINES, 0, EDGES * 2);///startIdx///# Elements/
 	}
 	void magic() {
 		int legjobb = elmetszetek();
@@ -166,7 +217,6 @@ public:
 		}
 		nodes = gp;
 	}
-
 	int elmetszetek() {
 		int sum = 0;
 		for (size_t i = 0; i < EDGES - 1; ++i) {
@@ -180,14 +230,11 @@ public:
 		}
 		return sum;
 	}
-
 	/*
 	* A kód alapja a http://flassari.is/2008/11/line-line-intersection-in-cplusplus/ oldalról származik
 	*/
 	bool metszikEgymast(grafPont* a, grafPont* b) {
-		if (a == nullptr || b == nullptr) {
-			return false;
-		}
+		if (a == nullptr || b == nullptr) return false;
 		float x1 = a[0].pos.x, x2 = a[1].pos.x, x3 = b[0].pos.x, x4 = b[1].pos.x;
 		float y1 = a[0].pos.y, y2 = a[1].pos.y, y3 = b[0].pos.y, y4 = b[1].pos.y;
 		float d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
@@ -199,7 +246,6 @@ public:
 		if (y < min(y1, y2) || y > max(y1, y2) || y < min(y3, y4) || y > max(y3, y4)) return false;
 		return true;
 	}
-
 	~Graf() {
 		delete[] nodes;
 	}
@@ -209,23 +255,28 @@ Graf g;
 
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
-    g.prepareNodes();
-	g.prepareEdges();
+	g.prepareNodes();
+	//g.prepareEdges();
+	//g.prepareCircle(0.5f,0.5f);
 }
 
 // Window has become invalid: Redraw
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-	g.drawEdges();
+	//g.drawEdges();
 	g.drawNodes();
+	//g.drawCircle();
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
-		
+		g.magic(); //heurisztika
+		g.prepareNodes();
+		g.prepareEdges();
+		glutPostRedisplay();
 	}
 }
 
@@ -238,16 +289,10 @@ void onMouseMotion(int pX, int pY) {
 }
 
 // Mouse click event
-void onMouse(int button, int state, int pX, int pY) { 
+void onMouse(int button, int state, int pX, int pY) {
 }
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
-	if (g.elmetszetek() > 110) {
-		g.magic(); //heurisztika
-		g.prepareNodes();
-		g.prepareEdges();
-		glutPostRedisplay();         // if d, invalidate display, i.e. redraw
-	}
 }
