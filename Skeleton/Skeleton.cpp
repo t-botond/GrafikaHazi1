@@ -62,7 +62,7 @@ class Graf {
 	grafPont* nodes;
 	bool szMtx[NODES][NODES];
 	unsigned int edgeVao;
-	unsigned int nodeVao[50];
+	unsigned int nodeVao[NODES];
 public:
 	Graf() : edgeVao(0) {
 		nodes = new grafPont[NODES];
@@ -86,10 +86,6 @@ public:
 			}
 		}
 	}
-	grafPont& operator[](size_t idx) {
-		if (idx >= NODES) throw "Tulindexeles";
-		return nodes[idx];
-	}
 	grafPont* edgeAt(size_t idx) {
 		if (idx >= EDGES) throw "Sok lesz az az el!";
 		size_t cnt = 0;
@@ -107,29 +103,36 @@ public:
 		return nullptr;
 	}
 	void prepareNodes(bool debug = false) {
-		if (debug) {
-			printf("Oke ide bejott");
-			return;
-		}
-		else {
-			for (size_t i = 0; i < NODES; ++i) {
+		for (size_t i = 0; i < NODES; ++i) {
+			printf("[ %d ] prepareNodes\n",i);
+			if (nodes == nullptr || nodeVao== nullptr) {
+				printf("[%d] nullptr\n", i);
+			}
+			else {
 				prepareCircle(nodes[i].pos.x, nodes[i].pos.y, nodeVao[i]);
 			}
+			
 		}
 	}
 	void drawNodes() {
+		printf("drawNodes\n");
 		for (size_t i = 0; i < NODES; ++i) {
-			drawCircle( nodeVao[i]);
+			if (nodes == nullptr) {
+				printf("[%d] nullptr\n", i);
+			}
+			else
+				drawCircle( nodeVao[i]);
 		}
 	}
 	void prepareCircle(float x, float y, unsigned int& vao) {
-		if (vao == 0) glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		unsigned int vbo;
+		glGenVertexArrays(1, &vao);
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		float vertices[ CIRCLE_RESOLUTION * 2];
-		for (int i = 0; i <= CIRCLE_RESOLUTION; i++) {
+		float vertices[ CIRCLE_RESOLUTION * 2];	
+		printf("\tIde eljut \t %d \t %d \n",vao, vbo);
+		for (size_t i = 0; i <= CIRCLE_RESOLUTION; ++i) {
 			float angle = float(i) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
 			vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
 			vec3 t = trf(p);
@@ -182,6 +185,7 @@ public:
 		glDrawArrays(GL_LINES, 0, EDGES * 2);///startIdx///# Elements/
 	}
 	void magic() {
+		/*
 		int legjobb = elmetszetek();
 		grafPont* gp = nodes;
 		for (int i = 0; i < 300; ++i) {
@@ -194,6 +198,7 @@ public:
 			else delete[] nodes;
 		}
 		nodes = gp;
+		*/
 	}
 	int elmetszetek() {
 		int sum = 0;
@@ -250,10 +255,12 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
-		//g.magic(); //heurisztika
-		//g.prepareNodes();
-		//g.prepareEdges();
+		/*
+		g.magic(); //heurisztika
+		g.prepareNodes();
+		g.prepareEdges();
 		glutPostRedisplay();
+		*/
 	}
 }
 
