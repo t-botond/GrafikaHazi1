@@ -1,4 +1,4 @@
-#include "framework.h"
+ï»¿#include "framework.h"
 
 const char* const vertexSource = R"(
 	#version 330				// Shader 3.3
@@ -25,17 +25,17 @@ GPUProgram gpuProgram;
 //Konstansok
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 const int NODES = 50;
-const float TELITETTSEG=0.05f;
-const int CIRCLE_RESOLUTION=16;
-const float RADIUS=0.03f;
+const float TELITETTSEG = 0.05f;
+const int CIRCLE_RESOLUTION = 16;
+const float RADIUS = 0.03f;
 const size_t EDGES = 61; // (((NODES - 1)* NODES) / 2)* TELITETTSEG;
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	vec3 ret;
 	ret.z = 1.0f + inp.x * inp.x + inp.y * inp.y;
-	ret.x = inp.x / ret.z ;
-	ret.y = inp.y / ret.z ;
+	ret.x = inp.x / ret.z;
+	ret.y = inp.y / ret.z;
 	return ret * nagyitas;
 }
 
@@ -55,15 +55,16 @@ float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
 }
 float d(const vec3& a, const vec3& b) {
-	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
+	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 tÃ­pusÃº tagvÃ¡ltozÃ³. (x,y,w)
 }
 
 class Graf {
 	grafPont* nodes;
 	bool szMtx[NODES][NODES];
 	unsigned int edgeVao;
-	unsigned int nodeVao[NODES];
+	unsigned int nodeVao[50];
 public:
+	
 	Graf() : edgeVao(0) {
 		nodes = new grafPont[NODES];
 		int szukseges_el = EDGES;
@@ -72,8 +73,7 @@ public:
 				szMtx[x][y] = false;
 			}
 		}
-		for (size_t i = 0; i < NODES; ++i)
-			nodeVao[i] = 0;
+		for (size_t i = 0; i < NODES; ++i) nodeVao[i] = 0;
 
 		while (szukseges_el != 0) {
 			int n1 = rand() % NODES;
@@ -85,6 +85,10 @@ public:
 				}
 			}
 		}
+	}
+	grafPont& operator[](size_t idx) {
+		if (idx >= NODES) throw "Tulindexeles";
+		return nodes[idx];
 	}
 	grafPont* edgeAt(size_t idx) {
 		if (idx >= EDGES) throw "Sok lesz az az el!";
@@ -102,59 +106,42 @@ public:
 		}
 		return nullptr;
 	}
-	void prepareNodes(bool debug = false) {
+	void prepareCircle() {
+		glGenVertexArrays(50, nodeVao);
 		for (size_t i = 0; i < NODES; ++i) {
-			printf("[ %d ] prepareNodes\n",i);
-			if (nodes == nullptr || nodeVao== nullptr) {
-				printf("[%d] nullptr\n", i);
+			glBindVertexArray(nodeVao[i]);
+			unsigned int vbo;
+			glGenBuffers(1, &vbo);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo);
+			float vertices[CIRCLE_RESOLUTION * 2];
+			float x = nodes[i].pos.x, y = nodes[i].pos.y;
+			for (size_t j = 0; j <= CIRCLE_RESOLUTION; j++) {
+				float angle = float(j) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
+				vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
+				vec3 t = trf(p);
+				vertices[(j * 2)] = t.x;
+				vertices[(j * 2) + 1] = t.y;
 			}
-			else {
-				prepareCircle(nodes[i].pos.x, nodes[i].pos.y, nodeVao[i]);
-			}
-			
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+			gpuProgram.create(vertexSource, fragmentSource, "outColor");
 		}
+
 	}
-	void drawNodes() {
-		printf("drawNodes\n");
-		for (size_t i = 0; i < NODES; ++i) {
-			if (nodes == nullptr) {
-				printf("[%d] nullptr\n", i);
-			}
-			else
-				drawCircle( nodeVao[i]);
-		}
-	}
-	void prepareCircle(float x, float y, unsigned int& vao) {
-		glBindVertexArray(vao);
-		unsigned int vbo;
-		glGenVertexArrays(1, &vao);
-		glGenBuffers(1, &vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		float vertices[ CIRCLE_RESOLUTION * 2];	
-		printf("\tIde eljut \t %d \t %d \n",vao, vbo);
-		for (size_t i = 0; i <= CIRCLE_RESOLUTION; ++i) {
-			float angle = float(i) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
-			vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
-			vec3 t = trf(p);
-			vertices[i * 2] = t.x;
-			vertices[(i * 2) + 1] = t.y;
-		}
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-		gpuProgram.create(vertexSource, fragmentSource, "outColor");
-	}
-	void drawCircle(unsigned int& vao) {
+	void drawCircle() {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
 		glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
 		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
-		glBindVertexArray(vao);  // Draw call
-		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, CIRCLE_RESOLUTION /*# Elements*/);
+		for (size_t i = 0; i < NODES; ++i) {
+			glBindVertexArray(nodeVao[i]);  // Draw call
+			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, CIRCLE_RESOLUTION /*# Elements*/);
+		}
 	}
 	void prepareEdges() {
-		if(edgeVao == 0) glGenVertexArrays(1, &edgeVao);
+		if (edgeVao == 0) glGenVertexArrays(1, &edgeVao);
 		printf("nodeVao : %d \n", edgeVao);
 		glBindVertexArray(edgeVao);
 		unsigned int vbo;
@@ -185,7 +172,6 @@ public:
 		glDrawArrays(GL_LINES, 0, EDGES * 2);///startIdx///# Elements/
 	}
 	void magic() {
-		/*
 		int legjobb = elmetszetek();
 		grafPont* gp = nodes;
 		for (int i = 0; i < 300; ++i) {
@@ -198,7 +184,6 @@ public:
 			else delete[] nodes;
 		}
 		nodes = gp;
-		*/
 	}
 	int elmetszetek() {
 		int sum = 0;
@@ -214,8 +199,8 @@ public:
 		return sum;
 	}
 	/*
-	* A kód alapja a http://flassari.is/2008/11/line-line-intersection-in-cplusplus/ oldalról származik
-	* melyet késõbb kissé módosítottam.
+	* A kÃ³d alapja a http://flassari.is/2008/11/line-line-intersection-in-cplusplus/ oldalrÃ³l szÃ¡rmazik
+	* melyet kÃ©sÃµbb kissÃ© mÃ³dosÃ­tottam.
 	*/
 	bool metszikEgymast(grafPont* a, grafPont* b) {
 		if (a == nullptr || b == nullptr) return false;
@@ -239,7 +224,7 @@ Graf g;
 
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
-	g.prepareNodes();
+	g.prepareCircle();
 	g.prepareEdges();
 }
 
@@ -248,19 +233,17 @@ void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
 	g.drawEdges();
-	g.drawNodes();
+	g.drawCircle();
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
-		/*
 		g.magic(); //heurisztika
-		g.prepareNodes();
+		//g.prepareCircle();
 		g.prepareEdges();
 		glutPostRedisplay();
-		*/
 	}
 }
 
