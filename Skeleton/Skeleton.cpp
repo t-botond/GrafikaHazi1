@@ -3,10 +3,8 @@
 const char* const vertexSource = R"(
 	#version 330				// Shader 3.3
 	precision highp float;		// normal floats, makes no difference on desktop computers
-
 	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
 	layout(location = 0) in vec2 vp;	// Varying input: vp = vertex position is expected in attrib array 0
-
 	void main() {
 		gl_Position = vec4(vp.x, vp.y, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
 	}
@@ -14,11 +12,9 @@ const char* const vertexSource = R"(
 
 const char* const fragmentSource = R"(
 	#version 330			// Shader 3.3
-	precision highp float;	// normal floats, makes no difference on desktop computers
-	
+	precision highp float;	// normal floats, makes no difference on desktop computer
 	uniform vec3 color;		// uniform variable, the color of the primitive
 	out vec4 outColor;		// computed color of the current pixel
-
 	void main() {
 		outColor = vec4(color, 1);	// computed color is the color of the primitive
 	}
@@ -59,7 +55,7 @@ class Graf {
 	unsigned int nodeVao;
 public:
 	Graf() {
-		generateNodes();
+		nodes = new grafPont[NODES];
 		int szukseges_el = EDGES;
 		for (size_t x = 0; x < NODES -1 ; ++x) {
 			for (size_t y = x + 1; y < NODES; ++y) {
@@ -212,7 +208,6 @@ public:
 Graf g;
 
 void onInitialization() {
-	printf("tavolsag a [0] es [1] csucs kozott = %.3f", d(g[0], g[1]));
 	glViewport(0, 0, windowWidth, windowHeight);
     g.prepareNodes();
 	g.prepareEdges();
