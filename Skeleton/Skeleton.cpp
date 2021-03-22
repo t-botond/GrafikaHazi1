@@ -25,7 +25,6 @@ GPUProgram gpuProgram;
 #define TELITETTSEG 0.05
 #define CIRCLE_RESOLUTION 16
 #define RADIUS 0.03f
-
 const size_t EDGES =(((NODES - 1) * NODES) / 2) * TELITETTSEG;
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
@@ -39,8 +38,7 @@ vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 struct grafPont {
 	vec3 hip;
 	vec3 pos;
-	unsigned int vao;
-	grafPont() : vao(0) {
+	grafPont() {
 		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
@@ -60,9 +58,9 @@ class Graf {
 	grafPont* nodes;
 	bool szMtx[NODES][NODES];
 	unsigned int edgeVao;
-	unsigned int nodeVao;
+	unsigned int nodeVao[50];
 public:
-	Graf():nodeVao(0), edgeVao(0){
+	Graf() : edgeVao(0) {
 		nodes = new grafPont[NODES];
 		int szukseges_el = EDGES;
 		for (size_t x = 0; x < NODES - 1; ++x) {
@@ -70,6 +68,9 @@ public:
 				szMtx[x][y] = false;
 			}
 		}
+		for (size_t i = 0; i < NODES; ++i)
+			nodeVao[i] = 0;
+
 		while (szukseges_el != 0) {
 			int n1 = rand() % NODES;
 			int n2 = rand() % NODES;
@@ -101,33 +102,35 @@ public:
 		}
 		return nullptr;
 	}
-	
-	void prepareNodes() {
-		for (size_t i = 0; i < NODES; ++i) {
-			prepareCircle(nodes[i].pos.x, nodes[i].pos.y, nodes[i].vao);
+	void prepareNodes(bool debug = false) {
+		if (debug) {
+			printf("Oke ide bejott");
+			return;
+		}
+		else {
+			for (size_t i = 0; i < NODES; ++i) {
+				prepareCircle(nodes[i].pos.x, nodes[i].pos.y, nodeVao[i]);
+			}
 		}
 	}
 	void drawNodes() {
 		for (size_t i = 0; i < NODES; ++i) {
-			drawCircle(nodes[i].vao);
+			drawCircle( nodeVao[i]);
 		}
 	}
-	
 	void prepareCircle(float x, float y, unsigned int& vao) {
-		glGenVertexArrays(1, &vao);
+		if (vao == 0) glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		unsigned int vbo;
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-		float vertices[CIRCLE_RESOLUTION * 2];
-		
+		float vertices[ CIRCLE_RESOLUTION * 2];
 		for (int i = 0; i <= CIRCLE_RESOLUTION; i++) {
 			float angle = float(i) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
 			vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
 			vec3 t = trf(p);
 			vertices[i * 2] = t.x;
-			vertices[(i * 2) + 1] =t.y;
+			vertices[(i * 2) + 1] = t.y;
 		}
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
@@ -143,10 +146,8 @@ public:
 		glBindVertexArray(vao);  // Draw call
 		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, CIRCLE_RESOLUTION /*# Elements*/);
 	}
-
 	void prepareEdges() {
-		if(edgeVao == 0)
-			glGenVertexArrays(1, &edgeVao);
+		if(edgeVao == 0) glGenVertexArrays(1, &edgeVao);
 		printf("nodeVao : %d \n", edgeVao);
 		glBindVertexArray(edgeVao);
 		unsigned int vbo;
@@ -244,9 +245,9 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
-		g.magic(); //heurisztika
+		//g.magic(); //heurisztika
 		//g.prepareNodes();
-		g.prepareEdges();
+		//g.prepareEdges();
 		glutPostRedisplay();
 	}
 }
