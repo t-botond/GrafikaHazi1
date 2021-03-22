@@ -26,9 +26,9 @@ GPUProgram gpuProgram;
 #define CIRCLE_RESOLUTION 16
 #define RADIUS 0.03f
 
-const size_t EDGES = (((NODES - 1) * NODES) / 2) * TELITETTSEG;
+const size_t EDGES =(((NODES - 1) * NODES) / 2) * TELITETTSEG;
 
-vec3 trf(vec2 inp, float nagyitas = 2.0f) {
+vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	vec3 ret;
 	ret.z = 1.0f + inp.x * inp.x + inp.y * inp.y;
 	ret.x = inp.x / ret.z ;
@@ -37,7 +37,7 @@ vec3 trf(vec2 inp, float nagyitas = 2.0f) {
 }
 
 struct grafPont {
-	vec3 eukl;
+	vec3 hip;
 	vec3 pos;
 	unsigned int vao;
 	grafPont() : vao(0) {
@@ -45,15 +45,15 @@ struct grafPont {
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
 		pos.z = sqrtf(w);
-		eukl = trf(vec2(pos.x, pos.y));
+		hip = trf(vec2(pos.x, pos.y));
 	}
 };
 
 float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
 }
-float d(const grafPont& a, const grafPont& b) {
-	return acosh(-lorenz(a.pos, b.pos)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
+float d(const vec3& a, const vec3& b) {
+	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
 
 class Graf {
@@ -119,10 +119,12 @@ public:
 		unsigned int vbo;
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
 		float vertices[CIRCLE_RESOLUTION * 2];
+		
 		for (int i = 0; i <= CIRCLE_RESOLUTION; i++) {
-			float angle = float(i) / CIRCLE_RESOLUTION * 2.0f * M_PI;
-			vec2 p(x + RADIUS * cos(angle), y + RADIUS * sin(angle));
+			float angle = float(i) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
+			vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
 			vec3 t = trf(p);
 			vertices[i * 2] = t.x;
 			vertices[(i * 2) + 1] =t.y;
@@ -154,10 +156,10 @@ public:
 		for (size_t i = 0; i < EDGES; ++i) {
 			grafPont* tmp = edgeAt(i);
 			if (tmp == nullptr) continue;
-			vertices[i * 4] = tmp[0].eukl.x;
-			vertices[i * 4 + 1] = tmp[0].eukl.y;
-			vertices[i * 4 + 2] = tmp[1].eukl.x;
-			vertices[i * 4 + 3] = tmp[1].eukl.y;
+			vertices[i * 4] = tmp[0].hip.x;
+			vertices[i * 4 + 1] = tmp[0].hip.y;
+			vertices[i * 4 + 2] = tmp[1].hip.x;
+			vertices[i * 4 + 3] = tmp[1].hip.y;
 			delete[] tmp;
 		}
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -244,7 +246,7 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ') {
 		g.magic(); //heurisztika
 		//g.prepareNodes();
-		//g.prepareEdges();
+		g.prepareEdges();
 		glutPostRedisplay();
 	}
 }
