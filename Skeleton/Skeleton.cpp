@@ -21,11 +21,15 @@ const char* const fragmentSource = R"(
 )";
 
 GPUProgram gpuProgram;
-#define NODES 50
-#define TELITETTSEG 0.05
-#define CIRCLE_RESOLUTION 16
-#define RADIUS 0.03f
-const size_t EDGES =(((NODES - 1) * NODES) / 2) * TELITETTSEG;
+
+//Konstansok
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+const int NODES = 50;
+const float TELITETTSEG=0.05f;
+const int CIRCLE_RESOLUTION=16;
+const float RADIUS=0.03f;
+const size_t EDGES = 61; // (((NODES - 1)* NODES) / 2)* TELITETTSEG;
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	vec3 ret;
@@ -206,6 +210,7 @@ public:
 	}
 	/*
 	* A kód alapja a http://flassari.is/2008/11/line-line-intersection-in-cplusplus/ oldalról származik
+	* melyet késõbb kissé módosítottam.
 	*/
 	bool metszikEgymast(grafPont* a, grafPont* b) {
 		if (a == nullptr || b == nullptr) return false;
