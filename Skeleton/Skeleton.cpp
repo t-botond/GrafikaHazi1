@@ -31,7 +31,7 @@ const float RADIUS = 0.03f;			//Circle radius								//
 const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
 const float dist = 1.0f;			//Prefered distance							//	
 const float SURLODAS = 0.001f;													//
-const float DT = 0.001f;														//
+const float DT = 0.01f;														//
 const float HIBAHATAR = 0.05f;													//
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -251,16 +251,19 @@ public:
 		grafPont kozepe;
 		kozepe.pos.x = 0;
 		kozepe.pos.y = 0;
-		for(int i=0;i<50; ++i)
-			F(p, kozepe, true);
+		for(int i=0; i<5; ++i){
+			vec3 kul(kozepe.pos - p.pos);
+			kul = kul * 0.001f;
+			p.ero = p.ero + kul;
+		}
 		p.ero = p.ero - (p.v * SURLODAS);
 		p.v = p.v + p.ero / DT;
 		p.pos = p.pos + (p.v * DT);
 		p.repos();
 	}
 	void F(grafPont& a, grafPont& b,const bool szomszedos) {
-		float pref = 1.0f;
-		float hiba = 0.1f;
+		float pref = 0.3f;
+		float hiba = 0.0f;
 		float csillapitas = 0.0001f;
 		if (szomszedos) {	
 			if (normTav(a, b) < (pref - hiba)) { //tul kozel
@@ -276,7 +279,7 @@ public:
 		}
 		else {
 			vec3 kul(a.pos - b.pos);
-			kul = kul * csillapitas * (1/ normTav(a, b));
+			kul = kul * csillapitas * ( 1/(normTav(a, b)));
 			a.ero = a.ero + kul;
 		}
 	}
