@@ -29,9 +29,10 @@ const float TELITETTSEG = 0.05f;	//Number of real edges						//
 const int CIRCLE_RESOLUTION = 16;	//											//
 const float RADIUS = 0.03f;			//Circle radius								//
 const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
-const float dist = 0.7f;			//Prefered distance							//	
-const float SURLODAS = 0.01f;													//
-const float DT = 0.00001f;														//
+const float dist = 1.0f;			//Prefered distance							//	
+const float SURLODAS = 0.001f;													//
+const float DT = 0.001f;														//
+const float HIBAHATAR = 0.05f;													//
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
@@ -50,22 +51,18 @@ float d(const vec3& a, const vec3& b) {
 	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
 
-float normTav(const vec2& a) {
-	return sqrtf(a.x * a.x + a.y * a.y);
-}
 
 struct grafPont {
 	vec3 hip;
 	vec3 pos;
-	vec3 eroIranya;
+	vec3 ero;
 	vec3 v;
-	grafPont():v(0.0f) {
+	grafPont() {
 		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
 		pos.z = sqrtf(w);
 		hip = trf(vec2(pos.x, pos.y));
-		eroIranya = pos;
 	}
 	void repos() {
 		hip = trf(vec2(pos.x, pos.y)); 
@@ -74,12 +71,17 @@ struct grafPont {
 		if (this == &rhs) return *this;
 		this->hip = rhs.hip;
 		this->pos = rhs.pos;
-		this->eroIranya = rhs.eroIranya;
+		this->ero = rhs.ero;
 		this->v = rhs.v;
 		return *this;
 	}
 };
 
+float normTav(const grafPont& p, const grafPont& q) {
+	float a = abs(p.pos.x - q.pos.x);
+	float b = abs(p.pos.y - q.pos.y);
+	return sqrtf(a * a + b * b);
+}
 
 class Graf {
 	grafPont* nodes;
@@ -239,34 +241,44 @@ public:
 
 	void calcNode(const size_t idx) {
 		if (idx >= NODES) throw "tul lett indexelve";
-
 		grafPont& p = nodes[idx];
-		for (size_t i = 0; i < NODES; ++i) 
-		{
-			if (i != idx ) {
-				grafPont& tmp = nodes[i];
-				vec2 irany(p.pos.x - tmp.pos.x, p.pos.y - tmp.pos.y);
-				vec2 kul(p.pos.x - tmp.pos.x, p.pos.y - tmp.pos.y);
-				//kul = kul ;
-				
-				if (szMtx[(idx > i) ? i : idx][(idx > i) ? idx : i]) {
-					if (d(p.hip, tmp.hip) < dist) {
-						p.eroIranya = p.eroIranya -  kul - (p.v * SURLODAS); //Taszít
-					}
-					else {
-						p.eroIranya = p.eroIranya - (-kul) - p.v * SURLODAS; //Vonz
-					} 
-				}
-				else {
-					p.eroIranya = p.eroIranya - kul - p.v * SURLODAS;
-				}
-			}
-			p.v = p.v + (p.eroIranya * DT);
-			p.pos = p.pos + (p.v * DT);
-
+		p.ero = p.ero * 0;
+		for (size_t i = 0; i < NODES; ++i){
+			if (i == idx) continue;
+			grafPont& q = nodes[i];
+			F(p, q, szMtx[(idx > i) ? i : idx][(idx > i) ? idx : i]);
 		}
+		grafPont kozepe;
+		kozepe.pos.x = 0;
+		kozepe.pos.y = 0;
+		for(int i=0;i<50; ++i)
+			F(p, kozepe, true);
+		p.ero = p.ero - (p.v * SURLODAS);
+		p.v = p.v + p.ero / DT;
+		p.pos = p.pos + (p.v * DT);
 		p.repos();
-
+	}
+	void F(grafPont& a, grafPont& b,const bool szomszedos) {
+		float pref = 1.0f;
+		float hiba = 0.1f;
+		float csillapitas = 0.0001f;
+		if (szomszedos) {	
+			if (normTav(a, b) < (pref - hiba)) { //tul kozel
+				vec3 kul(a.pos - b.pos);
+				kul = kul * csillapitas;
+				a.ero = a.ero + kul;
+			}
+			else if (normTav(a, b) > (pref + hiba)) { //tul messze
+				vec3 kul(b.pos - a.pos);
+				kul = kul * csillapitas;
+				a.ero = a.ero + kul;
+			}
+		}
+		else {
+			vec3 kul(a.pos - b.pos);
+			kul = kul * csillapitas * (1/ normTav(a, b));
+			a.ero = a.ero + kul;
+		}
 	}
 
 	~Graf() {
@@ -296,13 +308,15 @@ void onDisplay() {
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == ' ') {
+	if (key == ' ' && dinSim == false) {
 		g.magic(); //heurisztika
 		g.prepareCircle();
 		g.prepareEdges();
 		glutPostRedisplay();
 		dinSim =!dinSim;
 	}
+	else if(key == ' ' && dinSim)
+		dinSim = !dinSim;
 }
 
 // Key of ASCII code released
@@ -321,10 +335,8 @@ void onMouse(int button, int state, int pX, int pY) {
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	if (dinSim) {
-		//for (size_t i = 0; i < NODES; ++i)
-		g.calcNode(0);
-
-
+		for (size_t i = 0; i < NODES; ++i)
+		g.calcNode(i);
 		g.prepareCircle();
 		g.prepareEdges();
 		glutPostRedisplay();
