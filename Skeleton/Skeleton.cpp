@@ -23,13 +23,16 @@ const char* const fragmentSource = R"(
 GPUProgram gpuProgram;
 
 //Konstansok
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-const int NODES = 50;
-const float TELITETTSEG = 0.05f;
-const int CIRCLE_RESOLUTION = 16;
-const float RADIUS = 0.03f;
-const size_t EDGES = 61; // (((NODES - 1)* NODES) / 2)* TELITETTSEG;
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+const int NODES = 50;															//
+const float TELITETTSEG = 0.05f;	//Number of real edges						//
+const int CIRCLE_RESOLUTION = 16;	//											//
+const float RADIUS = 0.03f;			//Circle radius								//
+const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
+const float dist = 0.06f;			//Prefered distance							//	
+const float SURLODAS = 0.1f;													//
+const float DT = 0.0001f;
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	vec3 ret;
@@ -39,17 +42,6 @@ vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	return ret * nagyitas;
 }
 
-struct grafPont {
-	vec3 hip;
-	vec3 pos;
-	grafPont() {
-		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
-		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
-		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
-		pos.z = sqrtf(w);
-		hip = trf(vec2(pos.x, pos.y));
-	}
-};
 
 float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
@@ -57,6 +49,37 @@ float lorenz(vec3 a, vec3 b) {
 float d(const vec3& a, const vec3& b) {
 	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
+
+float normTav(const vec3& a) {
+	return sqrtf(a.x * a.x + a.y * a.y);
+}
+
+struct grafPont {
+	vec3 hip;
+	vec3 pos;
+	vec3 eroIranya;
+	vec3 v;
+	grafPont():v(0.0f) {
+		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
+		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
+		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
+		pos.z = sqrtf(w);
+		hip = trf(vec2(pos.x, pos.y));
+		eroIranya = pos;
+	}
+	void repos() {
+		hip = trf(vec2(pos.x, pos.y)); 
+	}
+	grafPont& operator=(const grafPont& rhs) {
+		if (this == &rhs) return *this;
+		this->hip = rhs.hip;
+		this->pos = rhs.pos;
+		this->eroIranya = rhs.eroIranya;
+		this->v = rhs.v;
+		return *this;
+	}
+};
+
 
 class Graf {
 	grafPont* nodes;
@@ -66,7 +89,6 @@ class Graf {
 	unsigned int edgeVbo;
 	unsigned int nodeVbo;
 public:
-	
 	Graf() : edgeVao(0), edgeVbo(0), nodeVao(0), nodeVbo(0) {
 		nodes = new grafPont[NODES];
 		int szukseges_el = EDGES;
@@ -75,7 +97,6 @@ public:
 				szMtx[x][y] = false;
 			}
 		}
-
 		while (szukseges_el != 0) {
 			int n1 = rand() % NODES;
 			int n2 = rand() % NODES;
@@ -117,6 +138,7 @@ public:
 		float vertices[NODES * CIRCLE_RESOLUTION * 2];
 		for (size_t i = 0; i < NODES; ++i) {
 			float x = nodes[i].pos.x, y = nodes[i].pos.y;
+			//Az alábbi forciklus forrása: https://vik.wiki/Sz%C3%A1m%C3%ADt%C3%B3g%C3%A9pes_grafika_h%C3%A1zi_feladat_tutorial
 			for (size_t j = 0; j < CIRCLE_RESOLUTION; j++) {
 				float angle = float(j) / float(CIRCLE_RESOLUTION) * 2.0f * float(M_PI);
 				vec2 p(x + RADIUS * cosf(angle), y + RADIUS * sinf(angle));
@@ -144,8 +166,7 @@ public:
 	void prepareEdges() {
 		if (edgeVao == 0) glGenVertexArrays(1, &edgeVao);
 		glBindVertexArray(edgeVao);
-		if(edgeVbo==0)
-			glGenBuffers(1, &edgeVbo);
+		if(edgeVbo==0) glGenBuffers(1, &edgeVbo);
 		glBindBuffer(GL_ARRAY_BUFFER, edgeVbo);
 		float vertices[EDGES * 4];
 		for (size_t i = 0; i < EDGES; ++i) {
@@ -215,12 +236,42 @@ public:
 		if (y < min(y1, y2) || y > max(y1, y2) || y < min(y3, y4) || y > max(y3, y4)) return false;
 		return true;
 	}
+
+	void calcNode(const size_t idx) {
+		if (idx >= NODES) throw "tul lett indexelve";
+		grafPont& p = nodes[idx];
+		for (size_t i = 0; i < NODES; ++i) 
+		{
+			if (i != idx ) {
+				grafPont& tmp = nodes[i];
+				vec3 irany(tmp.pos.x - p.pos.x, tmp.pos.y - p.pos.y, 0.0f);
+				if (szMtx[(idx > i) ? i : idx][(idx > i) ? idx : i]) {
+					if (normTav(irany) < dist) {
+						p.eroIranya = p.eroIranya + (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Taszít
+					}
+					else {
+						p.eroIranya = p.eroIranya - (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Vonz
+					}
+				}
+				else {
+					p.eroIranya = p.eroIranya + (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Taszít
+				}
+			}
+			p.v = p.v + (p.eroIranya * DT);
+			p.pos = p.pos + (p.v * DT);
+
+		}
+		p.repos();
+
+	}
+
 	~Graf() {
 		delete[] nodes;
 	}
 };
 
 Graf g;
+bool dinSim = false;
 
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
@@ -246,6 +297,7 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 		g.prepareCircle();
 		g.prepareEdges();
 		glutPostRedisplay();
+		dinSim =!dinSim;
 	}
 }
 
@@ -264,4 +316,13 @@ void onMouse(int button, int state, int pX, int pY) {
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	if (dinSim) {
+		for (size_t i = 0; i < NODES; ++i)
+			g.calcNode(i);
+
+
+		g.prepareCircle();
+		g.prepareEdges();
+		glutPostRedisplay();
+	}
 }
