@@ -29,9 +29,9 @@ const float TELITETTSEG = 0.05f;	//Number of real edges						//
 const int CIRCLE_RESOLUTION = 16;	//											//
 const float RADIUS = 0.03f;			//Circle radius								//
 const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
-const float dist = 0.06f;			//Prefered distance							//	
-const float SURLODAS = 0.1f;													//
-const float DT = 0.0001f;
+const float dist = 0.7f;			//Prefered distance							//	
+const float SURLODAS = 0.01f;													//
+const float DT = 0.00001f;														//
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
@@ -50,7 +50,7 @@ float d(const vec3& a, const vec3& b) {
 	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
 
-float normTav(const vec3& a) {
+float normTav(const vec2& a) {
 	return sqrtf(a.x * a.x + a.y * a.y);
 }
 
@@ -239,22 +239,26 @@ public:
 
 	void calcNode(const size_t idx) {
 		if (idx >= NODES) throw "tul lett indexelve";
+
 		grafPont& p = nodes[idx];
 		for (size_t i = 0; i < NODES; ++i) 
 		{
 			if (i != idx ) {
 				grafPont& tmp = nodes[i];
-				vec3 irany(tmp.pos.x - p.pos.x, tmp.pos.y - p.pos.y, 0.0f);
+				vec2 irany(p.pos.x - tmp.pos.x, p.pos.y - tmp.pos.y);
+				vec2 kul(p.pos.x - tmp.pos.x, p.pos.y - tmp.pos.y);
+				//kul = kul ;
+				
 				if (szMtx[(idx > i) ? i : idx][(idx > i) ? idx : i]) {
-					if (normTav(irany) < dist) {
-						p.eroIranya = p.eroIranya + (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Taszít
+					if (d(p.hip, tmp.hip) < dist) {
+						p.eroIranya = p.eroIranya -  kul - (p.v * SURLODAS); //Taszít
 					}
 					else {
-						p.eroIranya = p.eroIranya - (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Vonz
-					}
+						p.eroIranya = p.eroIranya - (-kul) - p.v * SURLODAS; //Vonz
+					} 
 				}
 				else {
-					p.eroIranya = p.eroIranya + (irany * (1 / normTav(irany))) - p.v * SURLODAS; //Taszít
+					p.eroIranya = p.eroIranya - kul - p.v * SURLODAS;
 				}
 			}
 			p.v = p.v + (p.eroIranya * DT);
@@ -317,8 +321,8 @@ void onMouse(int button, int state, int pX, int pY) {
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	if (dinSim) {
-		for (size_t i = 0; i < NODES; ++i)
-			g.calcNode(i);
+		//for (size_t i = 0; i < NODES; ++i)
+		g.calcNode(0);
 
 
 		g.prepareCircle();
