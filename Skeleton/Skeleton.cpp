@@ -29,11 +29,12 @@ const float TELITETTSEG = 0.05f;	//Number of real edges						//
 const int CIRCLE_RESOLUTION = 16;	//											//
 const float RADIUS = 0.03f;			//Circle radius								//
 const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
-const float dist = 1.0f;			//Prefered distance							//	
+const float DIST = 0.4f;			//Prefered distance							//	
 const float SURLODAS = 0.001f;													//
-const float DT = 0.01f;														//
+const float DT = 0.008f;														//
 const float HIBAHATAR = 0.05f;													//
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+bool dinSim = false;
 
 vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	vec3 ret;
@@ -55,6 +56,7 @@ float d(const vec3& a, const vec3& b) {
 struct grafPont {
 	vec3 hip;
 	vec3 pos;
+	vec3 ujpos;
 	vec3 ero;
 	vec3 v;
 	grafPont() {
@@ -65,6 +67,7 @@ struct grafPont {
 		hip = trf(vec2(pos.x, pos.y));
 	}
 	void repos() {
+		pos = ujpos;
 		hip = trf(vec2(pos.x, pos.y)); 
 	}
 	grafPont& operator=(const grafPont& rhs) {
@@ -149,10 +152,9 @@ public:
 				vertices[(i * 32) + (j * 2) + 1] = t.y;
 			}
 		}
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
 		glEnableVertexAttribArray(0);  // AttribArray 0
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-		gpuProgram.create(vertexSource, fragmentSource, "outColor");	
 	}
 	void drawCircle() {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
@@ -180,10 +182,9 @@ public:
 			vertices[i * 4 + 3] = tmp[1].hip.y;
 			delete[] tmp;
 		}
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
 		glEnableVertexAttribArray(0);  // AttribArray 0
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-		gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	}
 	void drawEdges() {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
@@ -196,8 +197,9 @@ public:
 	}
 	void magic() {
 		int legjobb = elmetszetek();
+		const int kezdoall = legjobb;
 		grafPont* gp = nodes;
-		for (int i = 0; i < 300; ++i) {
+		while(legjobb > (kezdoall * 0.7)) {
 			nodes = new grafPont[NODES];
 			if (elmetszetek() < legjobb) {
 				delete[] gp;
@@ -239,10 +241,12 @@ public:
 		return true;
 	}
 
-	void calcNode(const size_t idx) {
+	float calcNode(const size_t idx) {
 		if (idx >= NODES) throw "tul lett indexelve";
 		grafPont& p = nodes[idx];
+		p.ujpos = p.pos;
 		p.ero = p.ero * 0;
+		p.v = p.v * 0;
 		for (size_t i = 0; i < NODES; ++i){
 			if (i == idx) continue;
 			grafPont& q = nodes[i];
@@ -258,20 +262,18 @@ public:
 		}
 		p.ero = p.ero - (p.v * SURLODAS);
 		p.v = p.v + p.ero / DT;
-		p.pos = p.pos + (p.v * DT);
-		p.repos();
+		p.ujpos = p.ujpos + (p.v * DT);
+		return sqrtf(p.v.x * p.v.x + p.v.y * p.v.y);
 	}
 	void F(grafPont& a, grafPont& b,const bool szomszedos) {
-		float pref = 0.3f;
-		float hiba = 0.0f;
-		float csillapitas = 0.0001f;
+		const float csillapitas = 0.0001f;
 		if (szomszedos) {	
-			if (normTav(a, b) < (pref - hiba)) { //tul kozel
+			if (normTav(a, b) < (DIST - HIBAHATAR)) { //tul kozel
 				vec3 kul(a.pos - b.pos);
 				kul = kul * csillapitas;
 				a.ero = a.ero + kul;
 			}
-			else if (normTav(a, b) > (pref + hiba)) { //tul messze
+			else if (normTav(a, b) > (DIST + HIBAHATAR)) { //tul messze
 				vec3 kul(b.pos - a.pos);
 				kul = kul * csillapitas;
 				a.ero = a.ero + kul;
@@ -283,24 +285,20 @@ public:
 			a.ero = a.ero + kul;
 		}
 	}
-
 	~Graf() {
 		delete[] nodes;
 	}
 };
 
 Graf g;
-bool dinSim = false;
+
 
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 	g.prepareCircle();
-	g.prepareCircle();
 	g.prepareEdges();
-	g.prepareCircle();
+	gpuProgram.create(vertexSource, fragmentSource, "outColor");
 }
-
-// Window has become invalid: Redraw
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
@@ -308,8 +306,6 @@ void onDisplay() {
 	g.drawCircle();
 	glutSwapBuffers(); // exchange buffers for double buffering
 }
-
-// Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == ' ' && dinSim == false) {
 		g.magic(); //heurisztika
@@ -319,29 +315,26 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 		dinSim =!dinSim;
 	}
 	else if(key == ' ' && dinSim)
-		dinSim = !dinSim;
+		dinSim =false;
 }
-
-// Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
-
-// Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {
 }
-
-// Mouse click event
 void onMouse(int button, int state, int pX, int pY) {
 }
-
-// Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	//long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	if (dinSim) {
+		float sum = 0.0f;
 		for (size_t i = 0; i < NODES; ++i)
-		g.calcNode(i);
+			sum+=g.calcNode(i);
+		for (size_t i = 0; i < NODES; ++i)
+			g[i].repos();
+		if (sum < 0.03f) dinSim = false;
 		g.prepareCircle();
 		g.prepareEdges();
+		glClear(GL_COLOR_BUFFER_BIT);
 		glutPostRedisplay();
 	}
 }
