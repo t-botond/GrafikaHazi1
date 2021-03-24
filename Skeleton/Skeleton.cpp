@@ -27,7 +27,7 @@ GPUProgram gpuProgram;
 const int NODES = 50;															//
 const float TELITETTSEG = 0.05f;	//Number of real edges						//
 const int CIRCLE_RESOLUTION = 16;	//											//
-const float RADIUS = 0.03f;			//Circle radius								//
+const float RADIUS = 0.03f;			//Circle radius								// 
 const size_t EDGES = 61;			//(((NODES - 1)* NODES) / 2)* TELITETTSEG;	//
 const float DIST = 0.4f;			//Prefered distance							//	
 const float SURLODAS = 0.001f;													//
@@ -43,15 +43,12 @@ vec3 trf(vec2 inp, float nagyitas = 1.8f) {
 	ret.y = inp.y / ret.z;
 	return ret * nagyitas;
 }
-
-
 float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
 }
 float d(const vec3& a, const vec3& b) {
 	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
-
 
 struct grafPont {
 	vec3 hip;
@@ -240,7 +237,6 @@ public:
 		if (y < min(y1, y2) || y > max(y1, y2) || y < min(y3, y4) || y > max(y3, y4)) return false;
 		return true;
 	}
-
 	float calcNode(const size_t idx) {
 		if (idx >= NODES) throw "tul lett indexelve";
 		grafPont& p = nodes[idx];
@@ -292,6 +288,41 @@ public:
 
 Graf g;
 
+struct Mozgas {
+	vec2 kezdopont;
+	Mozgas() {}
+	void onPress(int px, int py) {
+		kezdopont.x = float(px);
+		kezdopont.y = float(py);
+	}
+	void onMove(int px, int py) {
+		vec2 vegpont = vec2(float(px), float(py));
+		vec3 p = trf(kezdopont);
+		vec3 q = trf(vegpont);
+		float hipTav = d(p,q);
+		vec3 v = (q - p * coshf(hipTav)) / sinh (hipTav);
+		vec3 m1 = p * coshf(hipTav / 10) + v * sinh( (hipTav *6) /10) ;
+		vec3 m2 = p * coshf((hipTav * 6) / 10) + v * sinh((hipTav * 6) / 10);
+		for (size_t i = 0; i < NODES; ++i) {
+			tukrozes(g[i], m1);
+			tukrozes(g[i], m2);
+		}
+		kezdopont = vegpont;
+		g.prepareCircle();
+		glutPostRedisplay();
+	}
+	void tukrozes(grafPont& gp, const vec3& m1) {
+		vec3& p = gp.hip;
+		float pm = d(p, m1);
+		vec3 v = (m1 - p * coshf(pm)) / (sinh(pm));
+		vec3 pvesszo = p * coshf(2 * pm) + v * sinhf(2 * pm);
+		p = pvesszo;
+		gp.pos = p / p.z;
+
+	}
+
+};
+Mozgas mo;
 
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
@@ -320,21 +351,27 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
 void onMouseMotion(int pX, int pY) {
+	mo.onMove(pX, pY);
 }
 void onMouse(int button, int state, int pX, int pY) {
+	if (state == 1 && button == 0) {	//A lenyomás pillanata
+		mo.onPress(pX,pY);
+	}
+	else if (state == 0 && button == 0) {	//A felengedés pillanata
+		mo.onMove(pX, pY);
+	}
 }
 void onIdle() {
-	//long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	if (dinSim) {
 		float sum = 0.0f;
 		for (size_t i = 0; i < NODES; ++i)
 			sum+=g.calcNode(i);
 		for (size_t i = 0; i < NODES; ++i)
 			g[i].repos();
-		if (sum < 0.03f) dinSim = false;
+		if (sum < 0.03f) 
+			dinSim = false;
 		g.prepareCircle();
 		g.prepareEdges();
-		glClear(GL_COLOR_BUFFER_BIT);
 		glutPostRedisplay();
 	}
 }
