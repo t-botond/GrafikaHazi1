@@ -36,12 +36,18 @@ const float HIBAHATAR = 0.05f;													//
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 bool dinSim = false;
 
-vec3 trf(vec2 inp, float nagyitas = 1.8f) {
+vec3 trf(vec2 inp, float nagyitas = 1.0f) {
 	vec3 ret;
-	ret.z = 1.0f + inp.x * inp.x + inp.y * inp.y;
+	ret.z = (1.0f + inp.x * inp.x + inp.y * inp.y);
 	ret.x = inp.x / ret.z;
 	ret.y = inp.y / ret.z;
 	return ret * nagyitas;
+}
+vec3 Eukl(vec3 hip) {
+	vec3 ret;
+	ret.x = hip.x * hip.z;
+	ret.y = hip.y * hip.z;
+	return ret ;
 }
 float lorenz(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y - a.z * b.z;
@@ -49,7 +55,6 @@ float lorenz(vec3 a, vec3 b) {
 float d(const vec3& a, const vec3& b) {
 	return acoshf(-lorenz(a, b)); //Ahol a pos egy vec3 típusú tagváltozó. (x,y,w)
 }
-
 struct grafPont {
 	vec3 hip;
 	vec3 pos;
@@ -59,8 +64,6 @@ struct grafPont {
 	grafPont() {
 		pos.x = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
 		pos.y = ((float)(rand() % 2000) - 1000.0f) / 1000.0f;
-		float w = 1.0f + pos.x * pos.x + pos.y * pos.y;
-		pos.z = sqrtf(w);
 		hip = trf(vec2(pos.x, pos.y));
 	}
 	void repos() {
@@ -76,7 +79,6 @@ struct grafPont {
 		return *this;
 	}
 };
-
 float normTav(const grafPont& p, const grafPont& q) {
 	float a = abs(p.pos.x - q.pos.x);
 	float b = abs(p.pos.y - q.pos.y);
@@ -156,7 +158,7 @@ public:
 	void drawCircle() {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
 		glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
-		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+		float MVPtransf[4][4] = { 1.8f, 0, 0, 0, 0, 1.8f, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
 		glBindVertexArray(nodeVao);  // Draw call
@@ -186,7 +188,7 @@ public:
 	void drawEdges() {
 		int location = glGetUniformLocation(gpuProgram.getId(), "color");
 		glUniform3f(location, 0.0f, 0.0f, 1.0f); // 3 floats
-		float MVPtransf[4][4] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+		float MVPtransf[4][4] = { 1.8f, 0, 0, 0, 0, 1.8f, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);
 		glBindVertexArray(edgeVao);  // Draw call
@@ -256,6 +258,7 @@ public:
 			kul = kul * 0.001f;
 			p.ero = p.ero + kul;
 		}
+
 		p.ero = p.ero - (p.v * SURLODAS);
 		p.v = p.v + p.ero / DT;
 		p.ujpos = p.ujpos + (p.v * DT);
@@ -277,7 +280,7 @@ public:
 		}
 		else {
 			vec3 kul(a.pos - b.pos);
-			kul = kul * csillapitas * ( 1/(normTav(a, b)));
+			kul = kul * csillapitas * (1 / (normTav(a, b)));
 			a.ero = a.ero + kul;
 		}
 	}
@@ -300,25 +303,27 @@ struct Mozgas {
 		vec3 p = trf(kezdopont);
 		vec3 q = trf(vegpont);
 		float hipTav = d(p,q);
-		vec3 v = (q - p * coshf(hipTav)) / sinh (hipTav);
-		vec3 m1 = p * coshf(hipTav / 10) + v * sinh( (hipTav *6) /10) ;
-		vec3 m2 = p * coshf((hipTav * 6) / 10) + v * sinh((hipTav * 6) / 10);
-		for (size_t i = 0; i < NODES; ++i) {
-			tukrozes(g[i], m1);
-			tukrozes(g[i], m2);
+		if (hipTav > 0.05f) {
+			vec3 v = (q - p * coshf(hipTav)) / sinh(hipTav);
+			vec3 m1 = p * coshf(hipTav / 10) + v * sinh(hipTav / 10);
+			vec3 m2 = p * coshf((hipTav * 6) / 10) + v * sinh((hipTav * 6) / 10);
+			for (size_t i = 0; i < NODES; ++i) {
+				tukrozes(g[i], m1);
+				tukrozes(g[i], m2);
+				g[i].pos = Eukl(g[i].hip);
+				printf("%.3f ; %.3f ; %.3f \n", g[i].pos.x, g[i].pos.y, g[i].pos.z);
+			}
+			kezdopont = vegpont;
+			g.prepareCircle();
+			glutPostRedisplay();
 		}
-		kezdopont = vegpont;
-		g.prepareCircle();
-		glutPostRedisplay();
 	}
 	void tukrozes(grafPont& gp, const vec3& m1) {
 		vec3& p = gp.hip;
 		float pm = d(p, m1);
 		vec3 v = (m1 - p * coshf(pm)) / (sinh(pm));
-		vec3 pvesszo = p * coshf(2 * pm) + v * sinhf(2 * pm);
+		vec3 pvesszo = p * coshf(pm) + v * sinhf( pm);
 		p = pvesszo;
-		gp.pos = p / p.z;
-
 	}
 
 };
@@ -359,6 +364,17 @@ void onMouse(int button, int state, int pX, int pY) {
 	}
 	else if (state == 0 && button == 0) {	//A felengedés pillanata
 		mo.onMove(pX, pY);
+	}
+	if (state == 1 && button == 1) {
+		vec3 kiinduloEukl = vec3(0.0f,0.72f,0.0f);
+		printf(">eukl( %.4f ; %.4f ; %.4f ) \n", kiinduloEukl.x, kiinduloEukl.y, kiinduloEukl.z);
+
+		vec3 kiHip = trf(vec2(kiinduloEukl.x , kiinduloEukl.y),1.0f);
+		
+		printf(">hip( %.4f ; %.4f ; %.4f ) \n", kiHip.x, kiHip.y, kiHip.z);
+		kiHip = Eukl(kiHip);
+		printf(">eukl( %.4f ; %.4f ; %.4f ) \n", kiHip.x, kiHip.y, kiHip.z);
+
 	}
 }
 void onIdle() {
