@@ -224,12 +224,16 @@ public:
 	void magic() {
 		int legjobb = elmetszetek();
 		grafPont* gp = nodes;
-		while(legjobb >= elmetszetek()) {
+		int ig = legjobb *0.7;
+		int cnt = 300;
+		while(legjobb > ig && cnt >0) {
+			--cnt;
 			nodes = new grafPont[NODES];
 			if (elmetszetek() < legjobb) {
 				delete[] gp;
 				legjobb = elmetszetek();
 				gp = nodes;
+				break;
 			}
 			else delete[] nodes;
 		}
@@ -389,7 +393,7 @@ void onDisplay() {
 	glutSwapBuffers();
 }
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == ' ' && dinSim == false) {
+	if (key == ' ') {
 		g.magic();
 		g.prepareCircle();
 		g.prepareEdges();
@@ -417,6 +421,7 @@ void onIdle() {
 			sum+=g.calcNode(i);
 		for (size_t i = 0; i < NODES; ++i)
 			g[i].repos();
+			
 		g.prepareCircle();
 		g.prepareEdges();
 		glutPostRedisplay();
