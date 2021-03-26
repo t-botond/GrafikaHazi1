@@ -362,12 +362,11 @@ struct Mozgas {
 			glutPostRedisplay();
 		}
 	}
-	
 	void tukrozes(grafPont& gp, const vec3& m1) {
 		vec3 p = hip(vec2(gp.pos.x, gp.pos.y));
 		float pm = dd(p, m1);
 		vec3 v = (m1 - p * coshf(pm)) / sinh(pm);
-		vec3 pvesszo = p * coshf(2.0f*pm) + v * sinhf(2.0f * pm);
+		vec3 pvesszo = p * coshf(2.0f * pm) + v * sinhf(2.0f * pm);
 		sikra(pvesszo);
 		gp.hip = pvesszo;
 	}
@@ -404,7 +403,7 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
 void onMouseMotion(int pX, int pY) {
-	mo.onMove(pX, pY);
+	mo.onMove(pX, pY );
 }
 void onMouse(int button, int state, int pX, int pY) {
 	if (state == 1 && button == 0) {
